@@ -361,14 +361,14 @@
 
     <article class="article">
 
-      <p>Until two days ago, I was confident in my ability to tackle any heap challenge. Having successfully completed every heap challenge on <a href="https://flagyard.com" target="_blank" rel="noopener">Flagyard</a>, I believed it couldn't get any tougher. However, I was proven wrong when my friend, <em>0x1337</em>, sent me a pwn with a vulnerability that led me down a rabbit hole of research.</p>
+      <p>Until two days ago, I was confident in my ability to tackle any heap challenge. Having successfully completed every heap challenge on <a href="https://flagyard.com" target="_blank" rel="noopener">Flagyard</a>, I believed it couldn’t get any tougher. However, I was proven wrong when my friend, <em>0x1337</em>, sent me a pwn with a vulnerability that led me down a rabbit hole of research.</p>
       <p>In this detailed write-up, I'll explain how I abused a null byte overflow to achieve arbitrary code execution.</p>
 
       <h2 id="recon">Recon</h2>
 
       <p>Upon loading the binary into Ghidra, I began my reconnaissance. Since the binary was stripped, I started by renaming functions, variables, and globals.</p>
-      <p>The binary itself doesn't do much. It's an application that manages a database of users and their email addresses. It provides functionalities for adding, deleting, updating, and viewing all user email addresses. The application employs a straightforward structure for users, with fields that include the length of the email and a pointer to the buffer for the email data.</p>
-      <p>Here's a visual representation of the structure:</p>
+      <p>The binary itself doesn't do much. It’s an application that manages a database of users and their email addresses. It provides functionalities for adding, deleting, updating, and viewing all user email addresses. The application employs a straightforward structure for users, with fields that include the length of the email and a pointer to the buffer for the email data.</p>
+      <p>Here’s a visual representation of the structure:</p>
 
       <pre><code>typedef struct user {
     int email_len;
@@ -376,9 +376,9 @@
 } user;</code></pre>
 
       <p>The application maintains a list of users in a global array. This array is used to access user information. Users provide the index into this array at creation time, which is then used to access their information.</p>
-      <p>Upon analyzing the functions, I observed that proper pointer arithmetic was employed. When a user was deleted, their position in the global array, which holds pointers to the user structures, was zeroed out. This ensured that we couldn't access deleted user pointers, thereby preventing access to freed memory and avoiding any use-after-free situations.</p>
-      <p>After a deep analysis of the user creation function, I noticed that we couldn't create an email with a length greater than 512 bytes. Additionally, the maximum number of users in the user list was limited to 10, making the highest index 9. All user input emails were also terminated with a null byte at the end. This was the vulnerable part of the code. The bug was present in both the user creation and editing functions.</p>
-      <p>Here's the vulnerable code:</p>
+      <p>Upon analyzing the functions, I observed that proper pointer arithmetic was employed. When a user was deleted, their position in the global array, which holds pointers to the user structures, was zeroed out. This ensured that we couldn’t access deleted user pointers, thereby preventing access to freed memory and avoiding any use-after-free situations.</p>
+      <p>After a deep analysis of the user creation function, I noticed that we couldn’t create an email with a length greater than 512 bytes. Additionally, the maximum number of users in the user list was limited to 10, making the highest index 9. All user input emails were also terminated with a null byte at the end. This was the vulnerable part of the code. The bug was present in both the user creation and editing functions.</p>
+      <p>Here’s the vulnerable code:</p>
 
       <pre><code>puts("User email:");
 n_bytes_read = read(0, *(void **)(*(int *)(&user_list + idx * 4) + 4),
@@ -388,17 +388,17 @@ if (n_bytes_read &lt; 1)
 else
     *(undefined *)(n_bytes_read + *(int *)(*(int *)(&user_list + idx * 4) + 4)) = 0;</code></pre>
 
-      <p>This code was extracted from the decompiled binary, so it might appear cryptic. Let's clean it up to understand what's happening.</p>
+      <p>This code was extracted from the decompiled binary, so it might appear cryptic. Let’s clean it up to understand what's happening.</p>
 
-      <pre><code>puts("User email:");
+      <pre><code>puts(“User email:”);
 bytes_read = read(0, user_list[idx]-&gt;email, user_list[idx]-&gt;email_len);
 if(bytes_read &lt; 1)
     user_list[idx]-&gt;email = 0;
 else
     user_list[idx]-&gt;email + bytes_read = 0;</code></pre>
 
-      <p>The vulnerability lies in the else case. By adding the total number of bytes read from the user to the buffer's address, we end up writing one byte past the allocated buffer's end. This uncontrolled write results in a null byte overflow.</p>
-      <p>After spending a few more minutes ensuring I hadn't missed anything, I confirmed that everything was in order. With the recon complete, I was ready to exploit the vulnerability.</p>
+      <p>The vulnerability lies in the else case. By adding the total number of bytes read from the user to the buffer's address, we end up writing one byte past the allocated buffer’s end. This uncontrolled write results in a null byte overflow.</p>
+      <p>After spending a few more minutes ensuring I hadn’t missed anything, I confirmed that everything was in order. With the recon complete, I was ready to exploit the vulnerability.</p>
       <p>I'll assume the reader has some familiarity with glibc's heap, pointer arithmetic, and practical experience with exploiting heap vulnerabilities, such as use-after-frees and similar issues.</p>
 
       <h2 id="heap">A Quick Refresher on the Heap and Its Design in glibc</h2>
